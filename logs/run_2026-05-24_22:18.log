@@ -1,0 +1,31 @@
+Initial graph state:
+	{
+    "user_messages": [
+        {
+            "type": "human",
+            "content": "Create a wall in Revit",
+            "metadata": {},
+            "kwargs": {}
+        }
+    ],
+    "script": null,
+    "script_explanation": null,
+    "script_result": null,
+    "script_evaluation": null,
+    "script_feedback": null,
+    "response_interpretation": null,
+    "hallucination_fix_instructions": null,
+    "errors": null,
+    "num_of_generation_attempts": 0,
+    "max_generation_attempts_achieved": false
+}
+
+[🤖 Генерация Revit скрипта] started
+
+----------------------------------------   
+NODE: 🤖 Генерация Revit скрипта     
+----------------------------------------
+[🤖 Генерация Revit скрипта] pre_hook done
+🔴 Node 🤖 Генерация Revit скрипта failed after execution attempt: 1, at base.py: 3983 in _oai_structured_outputs_parser(): Structured Output response does not have a 'parsed' field nor a 'refusal' field. Received message:
+
+content='' additional_kwargs={'parsed': None, 'refusal': None} response_metadata={'token_usage': {'completion_tokens': 347, 'prompt_tokens': 1082, 'total_tokens': 1429, 'completion_tokens_details': {'accepted_prediction_tokens': None, 'audio_tokens': 0, 'reasoning_tokens': 529, 'rejected_prediction_tokens': None, 'image_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': 0, 'cached_tokens': 64, 'cache_write_tokens': 0, 'video_tokens': 0}, 'cost': 0.00101957, 'is_byok': False, 'cost_details': {'upstream_inference_cost': 0.00101957, 'upstream_inference_prompt_cost': 0.00041232, 'upstream_inference_completions_cost': 0.00060725}}, 'model_provider': 'openai', 'model_name': 'z-ai/glm-4.7-20251222', 'system_fingerprint': None, 'id': 'gen-1779650294-l2DUzIMRzU1EB2tsmNeY', 'finish_reason': 'stop', 'logprobs': None} id='lc_run--019e5b6c-6eba-7872-948b-76bb37308466-0' tool_calls=[] invalid_tool_calls=[] usage_metadata={'input_tokens': 1082, 'output_tokens': 347, 'total_tokens': 1429, 'input_token_details': {'audio': 0, 'cache_read': 64}, 'output_token_details': {'audio': 0, 'reasoning': 529}}.

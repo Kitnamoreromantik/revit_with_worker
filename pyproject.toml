@@ -1,0 +1,22 @@
+[project]
+name = "revit-with-worker"
+version = "0.1.0"
+description = "Python project for Revit worker development."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "chainlit",
+    "demjson3",
+    "gigachat",
+    "grandalf>=0.8",
+    "json5",
+    "langchain-core",
+    "langchain-openai",
+    "langgraph",
+    "loguru",
+    "openai",
+    "pydantic",
+    "python-dotenv",
+    "requests",
+    "rich",
+]
