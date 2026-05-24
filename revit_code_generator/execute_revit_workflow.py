@@ -3,10 +3,10 @@ From repo root:
 uv run python revit_code_generator/execute_revit_workflow.py "Create a wall in Revit" "terminal-thread-1"
 """
 
-import time
 import asyncio
 import json
 import sys
+import time
 from typing import AsyncGenerator, Dict, Any
 
 from langchain_core.messages import HumanMessage
@@ -71,14 +71,33 @@ async def stream_revit_workflow(
     #         "thread_id": thread_id,
     #     }
 
-async def _run_workflow(message: str, thread_id: str) -> None:
-    async for event in stream_revit_workflow(message, thread_id):
-        # print(json.dumps(event, ensure_ascii=False))
-        pass
+def _extract_final_payload(events: list[Dict[str, Any]]) -> Dict[str, Any]:
+    for event in reversed(events):
+        payload = event.get("payload")
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+async def run_revit_workflow(message: str, thread_id: str) -> Dict[str, Any]:
+    events = [event async for event in stream_revit_workflow(message, thread_id)]
+    final_payload = _extract_final_payload(events)
+
+    return {
+        "thread_id": thread_id,
+        "script": final_payload.get("script"),
+        "script_explanation": final_payload.get("script_explanation"),
+        "errors": final_payload.get("errors"),
+        "events": events,
+    }
+
+
+async def _run_workflow(message: str, thread_id: str) -> Dict[str, Any]:
+    return await run_revit_workflow(message, thread_id)
 
 
 def main(message, thread_id):
-    asyncio.run(_run_workflow(message, thread_id))
+    return asyncio.run(run_revit_workflow(message, thread_id))
 
 
 if __name__ == "__main__":
@@ -89,4 +108,4 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
         raise SystemExit(2)
-    main(sys.argv[1], sys.argv[2])
+    print(json.dumps(main(sys.argv[1], sys.argv[2]), ensure_ascii=False))

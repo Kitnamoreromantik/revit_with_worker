@@ -1,0 +1,10 @@
+base_domain: "http://127.0.0.1:8008"
+model_id: "revit_code_generator"
+default_params: {}
+delay: 1
+connection_error_delay: 2
+max_http_retries: 1
+log_level: "INFO"
+mtls_enabled: false
+mtls_cert_path: null
+ssl_verify: true
