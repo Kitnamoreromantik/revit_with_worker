@@ -1,7 +1,4 @@
-# Revit c воркером
-
-## Зависимости
-- Python 3.11.13
+# Revit ассистент c воркером
 
 ## Виртуальное окружение
 
@@ -31,26 +28,12 @@ uv pip install requests
 uv pip install --python .venv/bin/python requests
 ```
 
-### Проверка Python внутри окружения
-
-```zsh
-python --version
-```
-
-или без активации:
-
-```zsh
-.venv/bin/python --version
-```
-
 ## Revit worker
 
-Воркер находится в файле `run_revit_worker.py`. Он использует локальный пакет
-`worker-server` для получения задач от бэкенда и запускает
-`revit_code_generator/execute_revit_workflow.py` для генерации Revit-кода через
-LLM.
+Воркер находится в файле `run_revit_worker.py`. Он использует локальный пакет `worker-server` для получения задач от бэкенда и запускает `revit_code_generator/execute_revit_workflow.py` для генерации Revit-API C# кода с помощью LLM.
 
 Запускать команды нужно из корня репозитория.
+
 ### Конфигурация
 
 Основная конфигурация воркера лежит в `revit_worker.yaml`:
@@ -105,14 +88,13 @@ uv run python run_revit_worker.py --config revit_worker.yaml
 uv run python run_revit_worker.py --config revit_worker.local.yaml
 ```
 
-Воркер всегда вызывает реальный LLM workflow. Перед запуском должны быть
-настроены переменные окружения и credentials, которые требуются
+Воркер всегда вызывает реальный LLM workflow. 
+Перед запуском должны быть настроены переменные окружения в `revit_code_generator/.env`, которые требуются
 `revit_code_generator/execute_revit_workflow.py`.
 
 ### Входной интерфейс
 
-Backend передает воркеру задачу через `worker-server`. Поле `data` задачи должно
-иметь следующий формат:
+Backend передает воркеру задачу через `worker-server`. Поле `data` задачи должно иметь следующий формат:
 
 ```json
 {
@@ -128,7 +110,7 @@ Backend передает воркеру задачу через `worker-server`.
 - `params.question` - текстовый запрос пользователя, по которому нужно
   сгенерировать Revit-код.
 
-Необязательные поля:
+Опционально:
 
 - `params.thread_id` - идентификатор thread/session для workflow.
 - `params.session_id` - альтернативный идентификатор session.
@@ -154,8 +136,7 @@ Backend передает воркеру задачу через `worker-server`.
 
 ### Выходной интерфейс
 
-Метод `inference()` воркера возвращает словарь, который `worker-server`
-кладет в поле `data` финального ответа:
+Метод `inference()` воркера возвращает словарь, который `worker-server` возвращает в поле `data`:
 
 ```json
 {
@@ -190,7 +171,7 @@ Backend передает воркеру задачу через `worker-server`.
     "script": "...generated Revit code...",
     "script_explanation": "...model explanation...",
     "errors": null,
-    "events": []
+    "events": [...]
   },
   "request_id": "backend-request-id",
   "worker_id": "worker-generated-id",
@@ -238,13 +219,13 @@ uv run python run_revit_worker.py --config revit_worker.local.yaml
 3. В третьем терминале отправить запрос как будто с frontend:
 
 ```zsh
-uv run python -c "import requests; print(requests.post('http://127.0.0.1:8008/frontend/request', json={'question': 'Create a wall in Revit'}).text)"
+uv run python -c "import requests; print(requests.post('http://127.0.0.1:8008/frontend/request', json={'question': 'Count windows in Revit'}).text)"
 ```
 
 Также можно отправить запрос в формате с `params`:
 
 ```zsh
-uv run python -c "import requests; print(requests.post('http://127.0.0.1:8008/frontend/request', json={'params': {'question': 'Create a wall in Revit'}}).text)"
+uv run python -c "import requests; print(requests.post('http://127.0.0.1:8008/frontend/request', json={'params': {'question': 'Count windows in Revit'}}).text)"
 ```
 
 4. Проверить результат, отправленный воркером:

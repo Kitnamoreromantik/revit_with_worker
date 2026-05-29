@@ -18,10 +18,11 @@ class NaturalLanguageInterpreter(BaseNode):
 
     async def core_logic(self, node_input: GraphState) -> GraphState:
         user_msg = node_input.user_messages[0].content
-        message = f"User question: {user_msg}\nscript result: {node_input.script_result}\nIs maximum allowed generation attempts achieved: {node_input.max_generation_attempts_achieved}"
+        message = f"User question: {user_msg}\nScript result: {node_input.script_result}\nIs maximum allowed generation attempts achieved: {node_input.max_generation_attempts_achieved}"
         logger.info(f"⚪ Input: {textwrap.fill(message, width=150)}")
         interpretation_raw = await self.call_llm_client(message=message)
         interpretation_text = getattr(interpretation_raw, "content", interpretation_raw)
+        logger.info(f"⚪ Output raw: {interpretation_raw}")
         interpretation = clean_llm_code(str(interpretation_text))
 
         return GraphState(
@@ -36,10 +37,10 @@ class NaturalLanguageInterpreter(BaseNode):
 
     async def test_logic(self, node_input: GraphState) -> GraphState:
         user_msg = node_input.user_messages[0].content
-        message = f"User question: {user_msg}\nscript result: {node_input.script_result}"
+        message = f"User question: {user_msg}\nScript result: {node_input.script_result}"
         logger.info(f"Test user message: {message}")
         await asyncio.sleep(delay=0.1)
-        interpretation = AIMessage(content="Test interpretation.")
+        interpretation = AIMessage(content="Test response / Тестовый ответ Revit ассистента.")
         logger.info(f"Interpretation: {interpretation.content}")
 
         return GraphState(

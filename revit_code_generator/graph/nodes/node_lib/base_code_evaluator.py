@@ -49,6 +49,10 @@ class ScriptEvaluatorBaseNode(BaseNode):
     STRUCTURED_OUTPUT_SCHEMA = CodeFeedbackSchema  # override in childs if needed
     TITLE = "Code script critic"
 
+    @staticmethod
+    def _format_user_messages(state: GraphState) -> str:
+        return "\n".join(str(message.content) for message in state.user_messages)
+
     async def pre_hook(self, _: GraphState) -> None:
         """Show generation attempt and banner that the node has started."""
         self.log_banner()
@@ -62,7 +66,7 @@ class ScriptEvaluatorBaseNode(BaseNode):
         Child code generation classes can override this core logic.
         """
         prompt = self.usr_prompt_template.format(
-            messages=state.user_messages,
+            messages=self._format_user_messages(state),
             script=state.script,
             script_explanation=state.script_explanation,
             script_result=state.script_result,
@@ -79,9 +83,9 @@ class ScriptEvaluatorBaseNode(BaseNode):
         return self.pack_into_state(state, result, is_max_iterations=is_max_iterations)
 
 
-    async def test_logic(self, state: GraphState, evaluation_test: Literal["Accept", "Incorrect", "Error or empty"]) -> GraphState:
+    async def test_logic(self, state: GraphState) -> GraphState:
         message = self.usr_prompt_template.format(
-            messages=state.user_messages,
+            messages=self._format_user_messages(state),
             script=state.script,
             script_explanation=state.script_explanation,
             script_result=state.script_result,
@@ -90,12 +94,14 @@ class ScriptEvaluatorBaseNode(BaseNode):
 
         # Simulate LLM response for testing purposes
         class MockEvaluation:
-            evaluation = evaluation_test 
+            evaluation = "Accept"  # or "Incorrect" or "Error or empty"
             feedback = "The script is test evaluated."
         llm_response = MockEvaluation()
 
         if state.num_of_generation_attempts == self.MAX_WORKFLOW_ITERATIONS:
             is_max_iterations = True
+        else:
+            is_max_iterations = False
 
         result = self.parse_llm_output(llm_response)
         return self.pack_into_state(state, result, is_max_iterations)

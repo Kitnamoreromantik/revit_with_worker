@@ -1,55 +1,126 @@
-import requests
 import textwrap
 import json
 import os
+from typing import Any
 
-from graph.states.graph_state import GraphState
-from graph.nodes.node_lib.base_node import BaseNode
-
-from utils.logger import logger
-
+import httpx
 from rich import print
 from rich.panel import Panel
 
-SERVER_URL = os.getenv("SERVER_URL", "http://host.docker.internal:6124/")
-# SERVER_URL = "http://localhost:6123/"  # in case of local windows test without docker and with old revit connector
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+from graph.states.graph_state import GraphState
+from graph.nodes.node_lib.base_node import BaseNode
+from utils.logger import logger
+
+
+MCP_URL = os.getenv("REVIT_MCP_URL")
+MCP_TOOL_NAME = os.getenv("REVIT_MCP_TOOL")
+MCP_TOKEN = os.getenv("REVIT_MCP_TOKEN", "")
+
+
+def mcp_result_to_text(result: Any) -> str:
+    """
+    Converts MCP CallToolResult into a readable string for GraphState.script_result.
+    Handles both text content and structuredContent if the server returns it.
+    """
+
+    text_parts = []
+
+    for item in getattr(result, "content", []) or []:
+        item_type = getattr(item, "type", None)
+
+        if item_type == "text":
+            text_parts.append(getattr(item, "text", ""))
+        else:
+            text_parts.append(str(item))
+
+    # MCP Python objects may expose structured content with either naming style
+    # depending on SDK/model layer.
+    structured = getattr(result, "structuredContent", None)
+    if structured is None:
+        structured = getattr(result, "structured_content", None)
+
+    if structured is not None:
+        try:
+            structured_text = json.dumps(structured, indent=2, ensure_ascii=False)
+        except Exception:
+            structured_text = str(structured)
+
+        if text_parts:
+            text_parts.append("\nStructured content:\n" + structured_text)
+        else:
+            text_parts.append(structured_text)
+
+    is_error = getattr(result, "isError", None)
+    if is_error is None:
+        is_error = getattr(result, "is_error", False)
+
+    output = "\n".join(part for part in text_parts if part is not None).strip()
+
+    if not output:
+        output = str(result)
+
+    if is_error:
+        return f"MCP tool returned error:\n{output}"
+
+    return output
+
 
 class RevitExecutor(BaseNode):
     """
-    Node that executes the Revit script stored in the state obtained with Revit server
-    connected to the active document and returns the result.
+    LangGraph node that executes C# Revit code through an MCP server.
+    Old version: direct requests.post(...)
+    New version: MCP ClientSession + call_tool(...)
     """
-    def run_revit_code(self, code: str, title: str = None):
-        """
-        Send C# code to RevitExecutor Revit add-in and get the result.
-        """
+
+    async def run_revit_code(self, code: str, title: str | None = None):
         script_status = None
         error = None
+
         code = textwrap.dedent(code).strip()
-        logger.info(f"{title or 'Revit client running'}")
+        logger.info(f"{title or 'Revit MCP client running'}")
+
+        headers = {}
+        if MCP_TOKEN:
+            headers["Authorization"] = f"Bearer {MCP_TOKEN}"
 
         try:
-            resp = requests.post(SERVER_URL, data=code.encode("utf-8"))
-            script_status = f"Status: {resp.status_code}, Response: {resp.text}"
-            # print(script_status)
-            logger.info(script_status)
+            async with httpx.AsyncClient(
+                headers=headers,
+                timeout=60.0,
+                follow_redirects=True,
+            ) as http_client:
+                async with streamable_http_client(
+                    MCP_URL,
+                    http_client=http_client,
+                ) as (read, write, _):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
 
-        except requests.exceptions.RequestException as e:
-            error = f"Connection error: {e}"
-            # print(error)
-            logger.info(error)
+                        result = await session.call_tool(
+                            MCP_TOOL_NAME,
+                            {
+                                "code": code
+                            },
+                        )
+
+                        script_status = mcp_result_to_text(result)
+                        logger.info(script_status)
+
+        except Exception as e:
+            error = f"MCP connection/tool error: {e}"
+            logger.error(error)
 
         return error, script_status
-
 
     async def pre_hook(self, _: GraphState) -> None:
         self.log_banner()
         print("\n----------------------------")
-        print(f"{'Revit client running'}\n")
-
+        print("Revit MCP client running\n")
 
     async def core_logic(self, node_input: GraphState) -> GraphState:
-        
         if not node_input.script:
             return GraphState(
                 user_messages=node_input.user_messages,
@@ -57,29 +128,20 @@ class RevitExecutor(BaseNode):
                 script_explanation=node_input.script_explanation,
                 script_result="No script found from the Generator agent!",
                 num_of_generation_attempts=node_input.num_of_generation_attempts,
-                errors = "node_input.script is empty!",
+                errors="node_input.script is empty!",
             )
 
         try:
-            err_msg, script_res = self.run_revit_code(node_input.script)
-            # print(f"SCRIPT RES: {script_res}")
+            err_msg, script_res = await self.run_revit_code(node_input.script)
 
         except Exception as err:
-            err_msg = str(err)
-            if not err_msg.strip():  # empty or only spaces received
-                err = "Unknown exception from the Revit client!"
-    
-            logger.error(f"{err}")
-            script_res = f"Revit client has thrown the exception: {err}!"
-        
+            err_msg = str(err) or "Unknown exception from the Revit MCP client!"
+            logger.error(err_msg)
+            script_res = f"Revit MCP client has thrown the exception: {err_msg}!"
+
         if err_msg:
-            err = str(err_msg)
-            logger.error(f"{err}")
-            script_res = f"Revit client has thrown the exception: {err}!"
-
-
-        # print(f"err_msg: {err_msg}\n")
-        # print(f"script_result: {script_res}\n")
+            logger.error(err_msg)
+            script_res = f"Revit MCP client has thrown the exception: {err_msg}!"
 
         return GraphState(
             user_messages=node_input.user_messages,
@@ -87,12 +149,10 @@ class RevitExecutor(BaseNode):
             script_explanation=node_input.script_explanation,
             script_result=script_res,
             num_of_generation_attempts=node_input.num_of_generation_attempts,
-            errors = err_msg,
+            errors=err_msg,
         )
 
-
     async def test_logic(self, node_input: GraphState) -> GraphState:
-        # print(node_input)
         return GraphState(
             user_messages=node_input.user_messages,
             script=node_input.script,
@@ -100,24 +160,30 @@ class RevitExecutor(BaseNode):
             script_result="Status: 200 Response: Total windows in model: 7",
             num_of_generation_attempts=node_input.num_of_generation_attempts,
         )
-    
 
     async def post_hook(self, node_output: GraphState) -> None:
         try:
             formatted = json.dumps(node_output.script_result, indent=4, ensure_ascii=False)
         except Exception:
             formatted = str(node_output.script_result)
+
         logger.info(f"\n{formatted}")
 
         MAX_LINES = 50
         lines = formatted.splitlines()
         if len(lines) > MAX_LINES:
             lines = lines[:MAX_LINES] + ["...", "[Output truncated]"]
+
         display_text = "\n".join(lines)
 
-        print(Panel(f"{display_text}", title=f"{self.name}", title_align="left", expand=False))
-        # print("\n")
-
+        print(
+            Panel(
+                display_text,
+                title=f"{self.name}",
+                title_align="left",
+                expand=False,
+            )
+        )
 
     def chainlit_output_render_step(self, node_output: dict) -> str:
         script_status = node_output.get("script_result")

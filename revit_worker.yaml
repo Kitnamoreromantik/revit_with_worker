@@ -1,4 +1,4 @@
-base_domain: "https://backend.example.com"
+base_domain: "https://wo-pi.gnai.ru:8443"
 model_id: "revit_code_generator"
 default_params: {}
 delay: 5

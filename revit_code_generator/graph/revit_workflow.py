@@ -24,7 +24,7 @@ import os
 
 load_dotenv()
 
-# MAX_WORKFLOW_ITERATIONS = 2
+# MAX_WORKFLOW_ITERATIONS = 2  # defined in revit_router.py
 
 initialize_session()
 CHAT_SESSION_CONTEXT = get_current_session()
@@ -45,61 +45,68 @@ def simple_revit_workflow():
         structured_output_schema = None if ("giga" in generator_llm.lower()) else RevitScriptGeneratorSchema,
         temperature = 0.7,
         max_tokens = None,
-        test_mode = False,
+        test_mode = True,
     )
 
-    # revit_script_executor = RevitExecutor(name = "🧩 Исполнение скрипта",
-    #     test_mode = IS_TEST_MODE,
-    #     # test_mode = False,
-    # )
+    revit_script_executor = RevitExecutor(name = "🧩 Исполнение скрипта", 
+                                          test_mode=True
+                            )
 
-    # revit_script_evaluator = RevitScriptEvaluator(name = "🚦 Оценка Revit скрипта",
-    #     structured_output_schema = CodeFeedbackSchema,
-    #     sys_prompt_name = "script_evaluator_sys_rus",
-    #     usr_prompt_template_name = "script_evaluator_usr_template",  # TODO: remove HumanMessage[] from
-    #     llm_id = evaluator_llm,
-    #     temperature = None,
-    #     max_tokens = None,
-    #     test_mode = False,
-    # )
+    revit_script_evaluator = RevitScriptEvaluator(
+        name = "🚦 Оценка Revit скрипта",
+        structured_output_schema = CodeFeedbackSchema,
+        sys_prompt_name = "script_evaluator_sys_rus",
+        usr_prompt_template_name = "script_evaluator_usr_template",
+        llm_id = evaluator_llm,
+        temperature = None,
+        max_tokens = None,
+        test_mode = True,
+    )
 
-    # revit_interpreter = NaturalLanguageInterpreter(name = "📝 Финальная оценка",
-    #     sys_prompt_name = "revit_interpreter_sys",
-    #     llm_id = interpreter_llm,
-    #     temperature = 0.9,
-    #     max_tokens = 350,
-    #     test_mode = False,
-    # )
+    revit_interpreter = NaturalLanguageInterpreter(
+        name = "📝 Финальная оценка",
+        sys_prompt_name = "revit_interpreter_sys",
+        llm_id = interpreter_llm,
+        temperature = None,
+        max_tokens = None,
+        test_mode = True,
+    )
   
     # Define the state graph:
     graph = StateGraph(GraphState)
 
     # Add nodes:
     graph.add_node(revit_generator.name, revit_generator)
-    # graph.add_node(revit_script_executor.name, revit_script_executor)
-    # graph.add_node(revit_script_evaluator.name, revit_script_evaluator)
-    # graph.add_node(revit_interpreter.name, revit_interpreter)
+    graph.add_node(revit_script_executor.name, revit_script_executor)
+    graph.add_node(revit_script_evaluator.name, revit_script_evaluator)
+    graph.add_node(revit_interpreter.name, revit_interpreter)
 
     # Add edges:
     graph.add_edge(START, revit_generator.name)
-    # graph.add_conditional_edges(revit_generator.name, abort_pipeline_if_no_code,
-    #     {
-    #         "Continue": revit_script_evaluator.name,
-    #         "Abort": END  # If no code generated, do not spend tokens
-    #     }
-    # )
-    # graph.add_edge(revit_generator.name, revit_script_evaluator.name)
 
-    # graph.add_conditional_edges(revit_script_evaluator.name, route_revit_script,
-    #     {
-    #         "Accepted or stopped": revit_interpreter.name,
-    #         "Incorrect result": revit_generator.name,
-    #         "Error or empty result": revit_generator.name
-    #     }
-    # )
+    graph.add_conditional_edges(
+        revit_generator.name,
+        abort_pipeline_if_no_code,
+        {
+            "Continue": revit_script_executor.name,
+            "Abort": END,
+        },
+    )
 
-    # graph.add_edge(revit_interpreter.name, END)
-    graph.add_edge(revit_generator.name, END)
+    graph.add_edge(revit_script_executor.name, revit_script_evaluator.name)
+
+    graph.add_conditional_edges(
+        revit_script_evaluator.name,
+        route_revit_script,
+        {
+            "Accepted or stopped": revit_interpreter.name,
+            "Incorrect result": revit_generator.name,
+            "Error or empty result": revit_generator.name,
+        },
+    )
+
+    graph.add_edge(revit_interpreter.name, END)
+    # graph.add_edge(revit_generator.name, END)
 
     
     # Compile the workflow:
@@ -110,9 +117,8 @@ def simple_revit_workflow():
     # Store not-compiled node instances for Chainlit rendering:
     G.node_instances = {
         revit_generator.name: revit_generator,
-        # revit_script_executor.name: revit_script_executor,
-        # revit_script_evaluator.name: revit_script_evaluator,
-        # revit_interpreter.name: revit_interpreter,
+        revit_script_executor.name: revit_script_executor,
+        revit_script_evaluator.name: revit_script_evaluator,
+        revit_interpreter.name: revit_interpreter,
     }
-
     return G

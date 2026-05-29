@@ -48,3 +48,6 @@ ENV/
 Thumbs.db
 *.swp
 *.swo
+
+*.log
+*.pem

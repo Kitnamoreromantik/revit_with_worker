@@ -1,5 +1,5 @@
 """
-To start the Revit code generator worker, run the following command from the repository root:
+To start the Revit worker, run from the repo root:
 uv run python run_revit_worker.py --config revit_worker.yaml
 """
 import argparse
@@ -21,6 +21,7 @@ for path in (WORKER_SERVER_SRC, REVIT_CODE_GENERATOR_SRC):
         sys.path.insert(0, path_str)
 
 from worker_server import HTTPServer, WorkerProtocol  # noqa: E402
+from execute_revit_workflow import run_revit_workflow  # noqa: E402
 
 
 class RevitHTTPServer(HTTPServer):
@@ -41,9 +42,7 @@ class RevitCodeGeneratorWorker(WorkerProtocol):
             or data.get("thread_id")
             or f"revit-worker-{uuid.uuid4()}"
         )
-
-        from execute_revit_workflow import run_revit_workflow
-
+        # Run revit workflow and collect events:
         result = asyncio.run(run_revit_workflow(question, str(thread_id)))
         return {
             "question": question,
@@ -71,7 +70,7 @@ class GracefulKiller:
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
-    def exit_gracefully(self, signum, frame):
+    def exit_gracefully(self):
         self.logger.info("Exiting gracefully after this iteration")
         self.kill_now = True
 
@@ -87,11 +86,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    args = parse_args()
-    worker = RevitCodeGeneratorWorker()
-    server = RevitHTTPServer(worker=worker, config_path=args.config)
-    killer = GracefulKiller(server.logger)
-    server.run_loop(killer=killer)
+    server = RevitHTTPServer(
+        worker=RevitCodeGeneratorWorker(), 
+        config_path=parse_args().config
+    ) 
+    server.run_loop(killer=GracefulKiller(server.logger))
 
 
 if __name__ == "__main__":
