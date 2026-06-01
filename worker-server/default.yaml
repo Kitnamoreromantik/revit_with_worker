@@ -1,0 +1,12 @@
+base_domain: "https://backend.example.com"
+model_id: "my_model_v1"
+default_params:
+  param1: "default_value"
+  param2: 42
+delay: 5
+connection_error_delay: 10
+max_http_retries: 3
+log_level: "INFO"
+mtls_enabled: false
+mtls_cert_path: null
+ssl_verify: true

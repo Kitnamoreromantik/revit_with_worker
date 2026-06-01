@@ -1,0 +1,83 @@
+stages:
+  - test
+  - build
+  - publish
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+default:
+  image: registry.genai.int/ci/uv:python3.10-alpine
+  before_script:
+    - |
+      if [ -n "${NEXUS_CA:-}" ]; then
+        # Устанавливаем системные CA и добавляем кастомный сертификат Nexus
+        mkdir -p /usr/local/share/ca-certificates
+        if [ -f "$NEXUS_CA" ]; then
+          # Если NEXUS_CA — путь к файлу (file variable в GitLab), возможно с несколькими сертификатами
+          awk '/-----BEGIN CERTIFICATE-----/{n++; f=sprintf("nexus-ca-%d.crt", n); print > f; next} /-----END CERTIFICATE-----/{print >> f; close(f); next} f{print >> f}' "$NEXUS_CA"
+          for f in nexus-ca-*.crt; do
+            [ -f "$f" ] || continue
+            mv "$f" "/usr/local/share/ca-certificates/$f"
+          done
+          # Для pip/requests укажем явно корневой сертификат, если он задан как file variable
+          export PIP_CERT="$NEXUS_CA"
+          export SSL_CERT_FILE="$NEXUS_CA"
+          export REQUESTS_CA_BUNDLE="$NEXUS_CA"
+        else
+          # Если NEXUS_CA — содержимое одного PEM-сертификата
+          printf "%s\n" "$NEXUS_CA" > /usr/local/share/ca-certificates/nexus-ca.crt
+          export PIP_CERT="/usr/local/share/ca-certificates/nexus-ca.crt"
+          export SSL_CERT_FILE="/usr/local/share/ca-certificates/nexus-ca.crt"
+          export REQUESTS_CA_BUNDLE="/usr/local/share/ca-certificates/nexus-ca.crt"
+        fi
+        update-ca-certificates
+        echo "Imported Nexus CA certificate into system trust store"
+      fi
+      # Направляем все вызовы pip (включая из python -m build)
+      # в корпоративный Nexus, чтобы не ходить в публичный PyPI
+      if [ -n "${NEXUS_PYPI_PROXY:-}" ]; then
+        export PIP_INDEX_URL="$NEXUS_PYPI_PROXY"
+      fi
+    - uv venv .venv
+    - . .venv/bin/activate
+
+test:
+  stage: test
+  script:
+    - uv --native-tls pip install --index-url "$NEXUS_PYPI_PROXY" ".[test]"
+    - pytest
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+build_package:
+  stage: build
+  script:
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        echo "Setting package version from git tag: $CI_COMMIT_TAG"
+        sed -i "s/^version = \".*\"/version = \"$CI_COMMIT_TAG\"/" pyproject.toml
+      fi
+    - uv --native-tls pip install --index-url "$NEXUS_PYPI_PROXY" ".[release]"
+    - python -m build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 7 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+publish_to_nexus:
+  stage: publish
+  needs:
+    - job: build_package
+  dependencies:
+    - build_package
+  script:
+    - uv --native-tls pip install --index-url "$NEXUS_PYPI_PROXY" ".[release]"
+    - twine upload --repository-url "$NEXUS_PYPI" -u "$NEXUS_USER" -p "$NEXUS_PASSWORD" dist/*
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^[0-9]+\.[0-9]+\.[0-9]+$/'
+

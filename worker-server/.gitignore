@@ -1,0 +1,15 @@
+__pycache__
+.ipynb_checkpoints
+*.xlsx
+*.csv
+*.pkl
+*.pt
+*.ckpt
+*.bin
+*.model
+*.safetensors
+*_venv
+*-venv
+logs
+*.DS_Store
+.idea/

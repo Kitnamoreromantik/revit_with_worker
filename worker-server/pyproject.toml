@@ -1,0 +1,33 @@
+[project]
+name = "worker-server"
+version = "1.0.0"
+description = "Server for workers to connect with backend"
+authors = [
+    { name = "Sergey Setrakov", email = "sasetrakov@sberbank.ru" }
+]
+
+readme = "README.md"
+
+requires-python = ">=3.10"
+dependencies = [
+    "apscheduler>=3.10,<3.11",
+    "pydantic>=2.12.4",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "tenacity>=9.0,<9.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.4.2",
+    "requests-mock>=1.12.1",
+]
+release = [
+    "build>=1.0,<1.1",
+    # Ensure Twine/pkginfo support latest metadata versions
+    "twine>=6",
+    "pkginfo>=1.10.0",
+]
+
+[tool.setuptools]
+packages = { find = { where = ["src"], include = ["worker_server*"] } }
