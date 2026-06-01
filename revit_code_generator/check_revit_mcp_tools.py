@@ -1,3 +1,7 @@
+"""
+uv run python revit_code_generator/check_revit_mcp_tools.py
+"""
+
 import asyncio
 import json
 import os
@@ -99,6 +103,8 @@ async def check_tcp_reachable(url: str, timeout_seconds: float = 3.0) -> None:
     This does not verify MCP correctness; it only verifies network reachability.
     """
     host, port = parse_host_port(url)
+    print(host)
+    print(port)
 
     def _connect() -> None:
         with socket.create_connection((host, port), timeout=timeout_seconds):
@@ -115,10 +121,10 @@ async def list_mcp_tools() -> None:
         headers["Authorization"] = f"Bearer {MCP_TOKEN}"
 
     timeout = httpx.Timeout(
-        connect=5.0,
+        connect=20.0,
         read=60.0,
         write=30.0,
-        pool=5.0,
+        pool=20.0,
     )
 
     async with httpx.AsyncClient(
@@ -150,6 +156,10 @@ async def list_mcp_tools() -> None:
 
 async def main() -> None:
     print(f"Using MCP_URL: {MCP_URL}")
+    if MCP_CA_BUNDLE:
+        print(f"Using MCP_CA_BUNDLE: {MCP_CA_BUNDLE}")
+        # with open(MCP_CA_BUNDLE, encoding="utf-8") as cert_file:
+        #     print(cert_file.read())
 
     try:
         await check_tcp_reachable(MCP_URL)

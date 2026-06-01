@@ -1,5 +1,5 @@
 base_domain: "https://wo-pi.gnai.ru:8443"
-model_id: "revit_code_generator"
+model_id: "4445d313-bd42-4896-a237-bf4b3a8b47b0"
 default_params: {}
 delay: 5
 connection_error_delay: 10
