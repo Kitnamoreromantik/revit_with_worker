@@ -5,6 +5,6 @@ delay: 5
 connection_error_delay: 10
 max_http_retries: 3
 log_level: "INFO"
-mtls_enabled: false
-mtls_cert_path: null
-ssl_verify: true
+mtls_enabled: true
+mtls_cert_path: "revit_code_generator/client.pem"
+ssl_verify: "revit_code_generator/ca.pem"

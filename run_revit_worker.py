@@ -21,10 +21,33 @@ for path in (WORKER_SERVER_SRC, REVIT_CODE_GENERATOR_SRC):
         sys.path.insert(0, path_str)
 
 from worker_server import HTTPServer, WorkerProtocol  # noqa: E402
-from execute_revit_workflow import run_revit_workflow  # noqa: E402
 
 
 class RevitHTTPServer(HTTPServer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._validate_tls_consumed()
+
+    def _validate_tls_consumed(self) -> None:
+        expected_cert = self.config.mtls_cert_path if self.config.mtls_enabled else None
+        expected_verify = self.config.ssl_verify
+        sessions = {
+            "task/result": self.session,
+            "file": self.file_handler.session,
+        }
+
+        for session_name, session in sessions.items():
+            if session.verify != expected_verify:
+                raise RuntimeError(
+                    f"{session_name} session SSL verification is not configured from worker config: "
+                    f"expected {expected_verify!r}, got {session.verify!r}"
+                )
+            if getattr(session, "cert", None) != expected_cert:
+                raise RuntimeError(
+                    f"{session_name} session mTLS certificate is not configured from worker config: "
+                    f"expected {expected_cert!r}, got {getattr(session, 'cert', None)!r}"
+                )
+
     def get_task(self):
         task = super().get_task()
         if task.data and task.data.get("files") is None:
@@ -34,6 +57,8 @@ class RevitHTTPServer(HTTPServer):
 
 class RevitCodeGeneratorWorker(WorkerProtocol):
     def inference(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        from execute_revit_workflow import run_revit_workflow
+
         question = self._extract_question(data)
         params = data.get("params") or {}
         thread_id = (
@@ -52,12 +77,16 @@ class RevitCodeGeneratorWorker(WorkerProtocol):
     @staticmethod
     def _extract_question(data: Dict[str, Any]) -> str:
         params = data.get("params")
+        if params is None:
+            params = {}
         if not isinstance(params, dict):
-            raise ValueError("Expected task data to contain a 'params' dictionary")
+            raise ValueError("Expected task data['params'] to be a dictionary when provided")
 
-        question = params.get("question")
+        question = params.get("question") or data.get("prompt")
         if not isinstance(question, str) or not question.strip():
-            raise ValueError("Expected task data['params']['question'] to be a non-empty string")
+            raise ValueError(
+                "Expected task data to contain a non-empty 'params.question' or top-level 'prompt'"
+            )
 
         return question.strip()
 
@@ -70,7 +99,7 @@ class GracefulKiller:
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
-    def exit_gracefully(self):
+    def exit_gracefully(self, signum, frame):
         self.logger.info("Exiting gracefully after this iteration")
         self.kill_now = True
 
