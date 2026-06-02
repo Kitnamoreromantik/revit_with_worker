@@ -4,6 +4,8 @@ uv run python run_revit_worker.py --config revit_worker.yaml
 """
 import argparse
 import asyncio
+import ast
+import json
 import signal
 import sys
 import uuid
@@ -60,7 +62,7 @@ class RevitCodeGeneratorWorker(WorkerProtocol):
         from execute_revit_workflow import run_revit_workflow
 
         question = self._extract_question(data)
-        params = data.get("params") or {}
+        params = self._extract_params(data)
         thread_id = (
             params.get("thread_id")
             or params.get("session_id")
@@ -75,17 +77,43 @@ class RevitCodeGeneratorWorker(WorkerProtocol):
         }
 
     @staticmethod
-    def _extract_question(data: Dict[str, Any]) -> str:
+    def _extract_params(data: Dict[str, Any]) -> Dict[str, Any]:
         params = data.get("params")
         if params is None:
-            params = {}
-        if not isinstance(params, dict):
-            raise ValueError("Expected task data['params'] to be a dictionary when provided")
+            return {}
+        if isinstance(params, dict):
+            return params
+        if isinstance(params, str):
+            params = params.strip()
+            if not params:
+                return {}
+            for parser in (json.loads, ast.literal_eval):
+                try:
+                    parsed = parser(params)
+                except (ValueError, SyntaxError, TypeError, json.JSONDecodeError):
+                    continue
+                if isinstance(parsed, dict):
+                    return parsed
+            raise ValueError(
+                "Expected task data['params'] string to parse into a dictionary"
+            )
 
-        question = params.get("question") or data.get("prompt")
+        raise ValueError("Expected task data['params'] to be a dictionary when provided")
+
+    @classmethod
+    def _extract_question(cls, data: Dict[str, Any]) -> str:
+        params = cls._extract_params(data)
+
+        question = (
+            params.get("question")
+            or params.get("prompt")
+            or data.get("question")
+            or data.get("prompt")
+        )
         if not isinstance(question, str) or not question.strip():
             raise ValueError(
-                "Expected task data to contain a non-empty 'params.question' or top-level 'prompt'"
+                "Expected task data to contain a non-empty 'params.question', "
+                "'params.prompt', top-level 'question', or top-level 'prompt'"
             )
 
         return question.strip()
