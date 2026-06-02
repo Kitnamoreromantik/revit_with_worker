@@ -11,7 +11,7 @@ from mcp.client.streamable_http import streamable_http_client
 
 from graph.states.graph_state import GraphState
 from graph.nodes.node_lib.base_node import BaseNode
-from utils.mcp_http import get_client_cert_config, get_mcp_config, get_ssl_verify_config
+from utils.mcp_http import get_mcp_config, get_ssl_verify_config
 from utils.logger import logger
 
 
@@ -88,8 +88,8 @@ class RevitExecutor(BaseNode):
                 headers=headers,
                 timeout=60.0,
                 follow_redirects=True,
+                http2=True,
                 verify=get_ssl_verify_config(mcp_config),
-                cert=get_client_cert_config(mcp_config),
             ) as http_client:
                 async with streamable_http_client(
                     mcp_config.url,

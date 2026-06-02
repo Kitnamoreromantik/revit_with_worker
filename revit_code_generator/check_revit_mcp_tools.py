@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from utils.mcp_http import get_client_cert_config, get_mcp_config, get_ssl_verify_config
+from utils.mcp_http import get_mcp_config, get_ssl_verify_config
 
 
 MCP_CONFIG = get_mcp_config()
@@ -39,6 +39,18 @@ def print_exception_summary(exc: BaseException) -> None:
 
     for i, err in enumerate(errors, start=1):
         print(f"\n[{i}] {type(err).__name__}: {err}")
+        if isinstance(err, httpx.HTTPStatusError):
+            response = err.response
+            print(f"Status: {response.status_code}")
+            print(f"Content-Type: {response.headers.get('content-type', '')}")
+            try:
+                body = response.text.strip()
+            except httpx.ResponseNotRead:
+                body = ""
+                print("Response body was not read because the MCP SDK uses a streaming response.")
+            if body:
+                print("Response body:")
+                print(body[:2000])
 
     if any(isinstance(e, httpx.ConnectTimeout) for e in errors):
         print(
@@ -116,8 +128,8 @@ async def list_mcp_tools() -> None:
         headers=headers,
         timeout=timeout,
         follow_redirects=True,
+        http2=True,
         verify=get_ssl_verify_config(MCP_CONFIG),
-        cert=get_client_cert_config(MCP_CONFIG),
     ) as http_client:
         async with streamable_http_client(
             MCP_CONFIG.url,
@@ -140,6 +152,49 @@ async def list_mcp_tools() -> None:
                     print(json.dumps(tool.inputSchema, indent=2, ensure_ascii=False))
 
 
+async def probe_initialize_response() -> None:
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+    }
+    if MCP_CONFIG.token:
+        headers["Authorization"] = f"Bearer {MCP_CONFIG.token}"
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "manual-python-check",
+                "version": "0.1.0",
+            },
+        },
+    }
+
+    async with httpx.AsyncClient(
+        headers=headers,
+        timeout=httpx.Timeout(connect=20.0, read=60.0, write=30.0, pool=20.0),
+        follow_redirects=True,
+        http2=True,
+        verify=get_ssl_verify_config(MCP_CONFIG),
+    ) as http_client:
+        response = await http_client.post(MCP_CONFIG.url, json=payload)
+
+    print("\nPreflight initialize response:")
+    print(f"Status: {response.status_code}")
+    print(f"Content-Type: {response.headers.get('content-type', '')}")
+    session_id = response.headers.get("mcp-session-id")
+    if session_id:
+        print(f"MCP session id: {session_id}")
+    body = response.text.strip()
+    if body:
+        print("Response body:")
+        print(body[:2000])
+
+
 async def main() -> None:
     print(f"Using MCP_URL: {MCP_CONFIG.url}")
     if MCP_CONFIG.ca_bundle:
@@ -149,6 +204,7 @@ async def main() -> None:
 
     try:
         await check_tcp_reachable(MCP_CONFIG.url)
+        await probe_initialize_response()
         await list_mcp_tools()
 
     except BaseExceptionGroup as exc:

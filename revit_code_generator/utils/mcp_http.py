@@ -1,4 +1,5 @@
 import os
+import ssl
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -70,8 +71,21 @@ def get_mcp_config() -> McpConnectionConfig:
     )
 
 
-def get_ssl_verify_config(config: McpConnectionConfig | None = None) -> bool | str:
+def get_ssl_verify_config(config: McpConnectionConfig | None = None) -> bool | str | ssl.SSLContext:
     config = config or get_mcp_config()
+
+    if config.client_cert:
+        if config.insecure_ssl:
+            ssl_context = ssl._create_unverified_context()
+        else:
+            ssl_context = ssl.create_default_context(cafile=config.ca_bundle or None)
+
+        ssl_context.load_cert_chain(
+            certfile=config.client_cert,
+            keyfile=config.client_key or None,
+        )
+        return ssl_context
+
     if config.insecure_ssl:
         return False
 
@@ -79,18 +93,3 @@ def get_ssl_verify_config(config: McpConnectionConfig | None = None) -> bool | s
         return config.ca_bundle
 
     return True
-
-
-def get_client_cert_config(config: McpConnectionConfig | None = None) -> str | tuple[str, str] | None:
-    config = config or get_mcp_config()
-
-    if config.client_cert and config.client_key:
-        return config.client_cert, config.client_key
-
-    if config.client_cert:
-        return config.client_cert
-
-    if config.client_key:
-        raise ValueError("MCP config has 'client_key', but 'client_cert' is missing.")
-
-    return None
