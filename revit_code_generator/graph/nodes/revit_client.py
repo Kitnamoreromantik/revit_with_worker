@@ -1,6 +1,5 @@
 import textwrap
 import json
-import os
 from typing import Any
 
 import httpx
@@ -12,12 +11,8 @@ from mcp.client.streamable_http import streamable_http_client
 
 from graph.states.graph_state import GraphState
 from graph.nodes.node_lib.base_node import BaseNode
+from utils.mcp_http import get_client_cert_config, get_mcp_config, get_ssl_verify_config
 from utils.logger import logger
-
-
-MCP_URL = os.getenv("REVIT_MCP_URL")
-MCP_TOOL_NAME = os.getenv("REVIT_MCP_TOOL")
-MCP_TOKEN = os.getenv("REVIT_MCP_TOKEN", "")
 
 
 def mcp_result_to_text(result: Any) -> str:
@@ -82,25 +77,29 @@ class RevitExecutor(BaseNode):
         code = textwrap.dedent(code).strip()
         logger.info(f"{title or 'Revit MCP client running'}")
 
+        mcp_config = get_mcp_config()
+
         headers = {}
-        if MCP_TOKEN:
-            headers["Authorization"] = f"Bearer {MCP_TOKEN}"
+        if mcp_config.token:
+            headers["Authorization"] = f"Bearer {mcp_config.token}"
 
         try:
             async with httpx.AsyncClient(
                 headers=headers,
                 timeout=60.0,
                 follow_redirects=True,
+                verify=get_ssl_verify_config(mcp_config),
+                cert=get_client_cert_config(mcp_config),
             ) as http_client:
                 async with streamable_http_client(
-                    MCP_URL,
+                    mcp_config.url,
                     http_client=http_client,
                 ) as (read, write, _):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
 
                         result = await session.call_tool(
-                            MCP_TOOL_NAME,
+                            mcp_config.tool,
                             {
                                 "code": code
                             },

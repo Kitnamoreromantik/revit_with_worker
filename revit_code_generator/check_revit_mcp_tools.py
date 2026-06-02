@@ -4,32 +4,17 @@ uv run python revit_code_generator/check_revit_mcp_tools.py
 
 import asyncio
 import json
-import os
 import socket
 from typing import Iterable
 from urllib.parse import urlparse
 
 import httpx
-from dotenv import load_dotenv
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from utils.mcp_http import get_client_cert_config, get_mcp_config, get_ssl_verify_config
 
 
-load_dotenv()
-
-MCP_URL = os.getenv("REVIT_MCP_URL")
-MCP_TOKEN = os.getenv("REVIT_MCP_TOKEN", "")
-MCP_CA_BUNDLE = os.getenv("REVIT_MCP_CA_BUNDLE", "")
-MCP_INSECURE_SSL = os.getenv("REVIT_MCP_INSECURE_SSL", "false").lower() in {"1", "true", "yes"}
-
-
-def get_ssl_verify_config():
-    if MCP_INSECURE_SSL:
-        print("WARNING: SSL certificate verification is disabled. Use only for local/dev testing.")
-        return False
-    if MCP_CA_BUNDLE:
-        return MCP_CA_BUNDLE
-    return True
+MCP_CONFIG = get_mcp_config()
 
 
 def flatten_exception_group(exc: BaseException) -> list[BaseException]:
@@ -50,7 +35,7 @@ def print_exception_summary(exc: BaseException) -> None:
     errors = flatten_exception_group(exc)
 
     print("\nConnection failed.")
-    print(f"MCP_URL: {MCP_URL}")
+    print(f"MCP_URL: {MCP_CONFIG.url}")
 
     for i, err in enumerate(errors, start=1):
         print(f"\n[{i}] {type(err).__name__}: {err}")
@@ -117,8 +102,8 @@ async def check_tcp_reachable(url: str, timeout_seconds: float = 3.0) -> None:
 
 async def list_mcp_tools() -> None:
     headers = {}
-    if MCP_TOKEN:
-        headers["Authorization"] = f"Bearer {MCP_TOKEN}"
+    if MCP_CONFIG.token:
+        headers["Authorization"] = f"Bearer {MCP_CONFIG.token}"
 
     timeout = httpx.Timeout(
         connect=20.0,
@@ -131,10 +116,11 @@ async def list_mcp_tools() -> None:
         headers=headers,
         timeout=timeout,
         follow_redirects=True,
-        verify=get_ssl_verify_config(),
+        verify=get_ssl_verify_config(MCP_CONFIG),
+        cert=get_client_cert_config(MCP_CONFIG),
     ) as http_client:
         async with streamable_http_client(
-            MCP_URL,
+            MCP_CONFIG.url,
             http_client=http_client,
         ) as (read, write, _):
             async with ClientSession(read, write) as session:
@@ -155,14 +141,14 @@ async def list_mcp_tools() -> None:
 
 
 async def main() -> None:
-    print(f"Using MCP_URL: {MCP_URL}")
-    if MCP_CA_BUNDLE:
-        print(f"Using MCP_CA_BUNDLE: {MCP_CA_BUNDLE}")
-        # with open(MCP_CA_BUNDLE, encoding="utf-8") as cert_file:
-        #     print(cert_file.read())
+    print(f"Using MCP_URL: {MCP_CONFIG.url}")
+    if MCP_CONFIG.ca_bundle:
+        print(f"Using MCP_CA_BUNDLE: {MCP_CONFIG.ca_bundle}")
+    if MCP_CONFIG.client_cert:
+        print(f"Using MCP_CLIENT_CERT: {MCP_CONFIG.client_cert}")
 
     try:
-        await check_tcp_reachable(MCP_URL)
+        await check_tcp_reachable(MCP_CONFIG.url)
         await list_mcp_tools()
 
     except BaseExceptionGroup as exc:

@@ -1,0 +1,8 @@
+mcp:
+  url: https://wo-pi.gnai.ru:8443/mcp
+  tool: executeRevitCode
+  token: ""
+  ca_bundle: ca.pem
+  client_cert: client.pem
+  client_key: ""
+  insecure_ssl: false
